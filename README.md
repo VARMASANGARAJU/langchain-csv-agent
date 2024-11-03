@@ -43,7 +43,7 @@ To set up the project locally, follow these steps:
    ```
 
 3. **Install Ollama**: 
-   Follow the official [Ollama installation guide](https://ollama.com/docs/getting-started/installation) to install Ollama on your machine.
+   Follow the official [Ollama installation guide](https://ollama.com/library/gemma2) to install Ollama on your machine.
 
 4. **Pull the Gemma2 Model**:
    After installing Ollama, run the following command to pull the Gemma2 model:
