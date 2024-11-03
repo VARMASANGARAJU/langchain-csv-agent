@@ -8,6 +8,7 @@ from langchain_core.runnables import RunnableWithMessageHistory
 import redis
 
 from pydantic import BaseModel
+import ollama
 
 
 # Environment variable setup for Redis
@@ -44,7 +45,24 @@ async def query_csv(
     if api_key != "your_secure_api_key":
         raise HTTPException(status_code=403, detail="Unauthorized")
 
-     # Create the agent with memory
+    # Create a validation prompt for the LLM
+    validation_prompt = (
+        f"Determine if the following question is related to querying CSV data: "
+        f"\"{request.user_message}\". Respond with 'yes' if it is relevant, or 'no' if it is not."
+    )
+
+    # Get the LLM's response for validation
+    user_messages = [{"role": "user", "content": validation_prompt}]
+    validation_response = ollama.chat(model="gemma2", messages=user_messages)
+
+    # Check LLM's validation response
+    if "yes" not in validation_response['message']['content'].lower():
+        raise HTTPException(
+            status_code=400,
+            detail="The question is not relevant to CSV data. Please ask a question about retrieving or analyzing CSV data."
+        )
+
+    # Create the agent with memory
     message_history = get_memory(request.session_id)
     agent = create_csv_agent(
         llm,
