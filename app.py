@@ -1,5 +1,6 @@
 import os
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 from langchain_experimental.agents import create_csv_agent
 from langchain_ollama import ChatOllama
@@ -37,53 +38,58 @@ class QueryRequest(BaseModel):
     session_id: str
 
 @app.post("/query")
-async def query_csv(
-    request: QueryRequest,
-    api_key: str = Depends(api_key_header),
-):
-    # Validate API key (add your API key validation logic here)
-    if api_key != "your_secure_api_key":
-        raise HTTPException(status_code=403, detail="Unauthorized")
+async def query_csv( request: QueryRequest, api_key: str = Depends(api_key_header)):
+    try:
+        # Validate API key (add your API key validation logic here)
+        if api_key != "your_secure_api_key":
+            raise HTTPException(status_code=403, detail="Unauthorized")
 
-    # Create a validation prompt for the LLM
-    validation_prompt = (
-        f"Determine if the following question is related to querying CSV data: "
-        f"\"{request.user_message}\". Respond with 'yes' if it is relevant, or 'no' if it is not."
-    )
-
-    # Get the LLM's response for validation
-    user_messages = [{"role": "user", "content": validation_prompt}]
-    validation_response = ollama.chat(model="gemma2", messages=user_messages)
-
-    # Check LLM's validation response
-    if "yes" not in validation_response['message']['content'].lower():
-        raise HTTPException(
-            status_code=400,
-            detail="The question is not relevant to CSV data. Please ask a question about retrieving or analyzing CSV data."
+        # Create a validation prompt for the LLM
+        validation_prompt = (
+            f"Determine if the following question is related to querying CSV data: "
+            f"\"{request.user_message}\". Respond with 'yes' if it is relevant, or 'no' if it is not."
         )
 
-    # Create the agent with memory
-    message_history = get_memory(request.session_id)
-    agent = create_csv_agent(
-        llm,
-        request.csv_url,
-        verbose=True,
-        allow_dangerous_code=True,
-    )
+        # Get the LLM's response for validation
+        user_messages = [{"role": "user", "content": validation_prompt}]
+        validation_response = ollama.chat(model="gemma2", messages=user_messages)
 
-    agent_with_chat_history = RunnableWithMessageHistory(
-        agent,
-        lambda session_id: message_history,
-        input_messages_key="input",
-        history_messages_key="chat_history"
-    )
+        # Check LLM's validation response
+        if "yes" not in validation_response['message']['content'].lower():
+            return JSONResponse(
+                status_code=400,
+                content={"message": "The question is not relevant to CSV data. Please ask a question about retrieving or analyzing CSV data."}
+            )
 
-    response = agent_with_chat_history.invoke(
-        {"input": request.user_message},
-        config={"configurable": {"session_id": request.session_id}
-    })
+        # Create the agent with memory
+        message_history = get_memory(request.session_id)
+        agent = create_csv_agent(
+            llm,
+            request.csv_url,
+            verbose=True,
+            allow_dangerous_code=True,
+        )
 
-    print(response)
+        agent_with_chat_history = RunnableWithMessageHistory(
+            agent,
+            lambda session_id: message_history,
+            input_messages_key="input",
+            history_messages_key="chat_history"
+        )
 
-    return {"response": response}
+        response = agent_with_chat_history.invoke(
+            {"input": request.user_message},
+            config={"configurable": {"session_id": request.session_id}}
+        )
+
+        print(response)
+
+        return {"response": response}
+
+    except Exception as e:
+        print(e)
+        response = {
+            "message": "To provide a more accurate response, please include specific details about the CSV data you're working with. For the best results, mention the relevant column names and any data context or insights you’re seeking. This will help ensure the AI response is closely aligned with your needs."
+        }
+        return response
 
